@@ -577,20 +577,37 @@ const liveBar=document.getElementById('liveBar'), liveInfo=document.getElementBy
       livePreview=document.getElementById('livePreview'), lvFileName=document.getElementById('lvFileName'),
       lvTime2=document.getElementById('lvTime2');
 const LIVE_META='https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live/_meta.json';
+const LIVE_CHANNELS=[
+  'https://xioahu1232.github.io/img-hosting/canvas/live',
+  'https://cdn.jsdelivr.net/gh/xioahu1232/img-hosting@main/canvas/live',
+  'https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live'
+];
 let liveTimer=null,liveFile='',liveExt='md';
-async function fetchText(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}
+async function fetchLiveFile(name){
+  const t=Date.now();
+  let lastErr=null;
+  for(const base of LIVE_CHANNELS){
+    try{
+      const r=await fetch(base+'/'+name+'?t='+t,{cache:'no-store'});
+      if(r.ok)return await r.text();
+      lastErr=new Error('HTTP '+r.status+' @ '+base);
+    }catch(e){lastErr=e}
+  }
+  throw lastErr||new Error('所有通道不可达');
+}
+async function fetchMeta(){return JSON.parse(await fetchLiveFile('_meta.json'))}
 function renderLive(content){
   if(liveExt==='md'){livePreview.innerHTML=mdToHtml(content)}
   else{livePreview.innerHTML='<pre class="coderaw">'+esc(content)+'</pre>'}
 }
 async function liveTick(){
   try{
-    const meta=JSON.parse(await fetchText(LIVE_META+'?t='+Date.now()));
+    const meta=await fetchMeta();
     if(!meta.live){liveSetState(false,'直播已结束');return}
     const ext=(meta.file||'live.md').split('.').pop()||'md';
     const fname='live.'+ext;
     if(fname!==liveFile){liveFile=fname;liveExt=ext;lvFileName.textContent=meta.file||fname}
-    const content=await fetchText('https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live/'+fname+'?t='+Date.now());
+    const content=await fetchLiveFile(fname);
     renderLive(content);
     const t=meta.updated?new Date(meta.updated):new Date();
     const ts=t.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -609,7 +626,7 @@ document.getElementById('btnLiveClose').onclick=stopLive;
 document.getElementById('btnLiveQuit').onclick=stopLive;
 /* 启动时探测一次直播状态 */
 setTimeout(async()=>{
-  try{const meta=JSON.parse(await fetchText(LIVE_META+'?t='+Date.now()));if(meta.live){liveSetState(true);liveTick();liveTimer=setInterval(liveTick,2500)}}catch(e){}
+  try{const meta=await fetchMeta();if(meta.live){liveSetState(true);liveTick();liveTimer=setInterval(liveTick,2500)}}catch(e){}
 },800);
 
 
