@@ -100,6 +100,21 @@
   .empty{padding:28px 14px;text-align:center;color:var(--muted);font-size:13px}
   .libfoot{padding:8px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
     color:var(--muted);font-size:11px}
+  /* 直播预览 */
+  .livebar{display:none;align-items:center;gap:10px;padding:8px 12px;background:#10241a;
+    border-bottom:1px solid #1f4d33;font-size:13px}
+  .livebar.show{display:flex}
+  .livedot{width:10px;height:10px;border-radius:50%;background:var(--accent2);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .livebar .lvinfo{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+  .livebar .lvtime{color:var(--muted);font-size:11px;white-space:nowrap}
+  .liveview{display:none;position:fixed;inset:0;z-index:40;background:var(--bg);flex-direction:column}
+  .liveview.show{display:flex}
+  .lvhead{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);
+    border-bottom:1px solid var(--line);font-size:14px}
+  .lvhead .lvfile{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .livepreview{flex:1;overflow:auto;padding:16px 18px;line-height:1.7;font-size:15px}
+  .livepreview pre.coderaw{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font-family:ui-monospace,monospace;font-size:13px;white-space:pre}
   /* 导出菜单 */
   .menu{position:fixed;left:10px;right:10px;bottom:0;background:var(--panel);
     border-radius:16px 16px 0 0;border:1px solid var(--line);border-bottom:none;
@@ -194,6 +209,24 @@
     <div id="snapList"></div>
   </div>
 </div>
+<div class="livebar" id="liveBar">
+  <span class="livedot"></span>
+  <span class="lvinfo" id="liveInfo">直播中：等待内容…</span>
+  <span class="lvtime" id="liveTime"></span>
+  <button class="btn" id="btnLiveOpen">全屏</button>
+  <button class="btn warn" id="btnLiveClose">退出</button>
+</div>
+
+<div class="liveview" id="liveView">
+  <div class="lvhead">
+    <span class="lvfile" id="lvFileName">直播预览</span>
+    <span class="lvtime" id="lvTime2" style="color:var(--muted);font-size:11px"></span>
+    <button class="btn" id="btnLiveMin">收起</button>
+    <button class="btn warn" id="btnLiveQuit">退出直播</button>
+  </div>
+  <div class="livepreview" id="livePreview"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <div class="menu" id="exportMenu">
@@ -538,7 +571,48 @@ document.getElementById('btnHist').onclick=()=>{renderSnaps();document.getElemen
 document.getElementById('drawer').onclick=e=>{if(e.target.id==='drawer')e.currentTarget.classList.remove('show');};
 document.getElementById('btnClearSnap').onclick=()=>{if(confirm('清空当前文档的全部快照?')){setSnaps([]);renderSnaps();}};
 
-/* 导出 */
+/* 直播预览：轮询 GitHub raw，实时显示 AI 工作成果 */
+const liveBar=document.getElementById('liveBar'), liveInfo=document.getElementById('liveInfo'),
+      liveTime=document.getElementById('liveTime'), liveView=document.getElementById('liveView'),
+      livePreview=document.getElementById('livePreview'), lvFileName=document.getElementById('lvFileName'),
+      lvTime2=document.getElementById('lvTime2');
+const LIVE_META='https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live/_meta.json';
+let liveTimer=null,liveFile='',liveExt='md';
+async function fetchText(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}
+function renderLive(content){
+  if(liveExt==='md'){livePreview.innerHTML=mdToHtml(content)}
+  else{livePreview.innerHTML='<pre class="coderaw">'+esc(content)+'</pre>'}
+}
+async function liveTick(){
+  try{
+    const meta=JSON.parse(await fetchText(LIVE_META));
+    if(!meta.live){liveSetState(false,'直播已结束');return}
+    const ext=(meta.file||'live.md').split('.').pop()||'md';
+    const fname='live.'+ext;
+    if(fname!==liveFile){liveFile=fname;liveExt=ext;lvFileName.textContent=meta.file||fname}
+    const content=await fetchText('https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live/'+fname);
+    renderLive(content);
+    const t=meta.updated?new Date(meta.updated):new Date();
+    const ts=t.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    liveTime.textContent=ts;lvTime2.textContent='更新 '+ts;
+    liveInfo.textContent='直播中：'+((meta.file||fname)+' · '+content.length+' 字节');
+  }catch(e){liveTime.textContent='连接中…'}
+}
+function liveSetState(on,msg){
+  if(on){liveBar.classList.add('show');liveInfo.textContent=msg||'直播中…'}
+  else{liveBar.classList.remove('show');liveView.classList.remove('show');clearInterval(liveTimer);liveTimer=null;liveFile=''}
+}
+document.getElementById('btnLiveOpen').onclick=()=>liveView.classList.add('show');
+document.getElementById('btnLiveMin').onclick=()=>liveView.classList.remove('show');
+const stopLive=()=>{liveSetState(false,'');showToast('已退出直播')};
+document.getElementById('btnLiveClose').onclick=stopLive;
+document.getElementById('btnLiveQuit').onclick=stopLive;
+/* 启动时探测一次直播状态 */
+setTimeout(async()=>{
+  try{const meta=JSON.parse(await fetchText(LIVE_META));if(meta.live){liveSetState(true);liveTick();liveTimer=setInterval(liveTick,5000)}}catch(e){}
+},800);
+
+
 const exportMenu=document.getElementById('exportMenu');
 function downloadBlob(data,mime,name){
   const blob=data instanceof Blob?data:new Blob([data],{type:mime});
