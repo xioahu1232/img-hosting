@@ -76,6 +76,37 @@
     background:#000;border:1px solid var(--line);color:#fff;padding:8px 16px;border-radius:20px;
     font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:99}
   .toast.show{opacity:.95}
+  /* 导出菜单 */
+  .menu{position:fixed;left:10px;right:10px;bottom:0;background:var(--panel);
+    border-radius:16px 16px 0 0;border:1px solid var(--line);border-bottom:none;
+    padding:10px 12px calc(14px + env(safe-area-inset-bottom));z-index:60;
+    transform:translateY(110%);transition:transform .25s}
+  .menu.show{transform:translateY(0)}
+  .menu h3{margin:.2em 0 .5em;font-size:14px}
+  .menu .mi{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:10px;padding:12px;margin-bottom:8px;font-size:14px}
+  .menu .mi:active{transform:scale(.98)}
+  .menu .mi .d{flex:1}
+  .menu .mi .sub{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  /* 打印/PDF */
+  @media print{
+    header,.tabs,.statusbar,.drawer,.menu,.toast{display:none !important}
+    body{background:#fff;color:#000;height:auto;overflow:visible}
+    main{display:block}
+    .pane{display:none !important}
+    .pane.show,.pane[data-pane=prev]{display:block !important}
+    .preview{color:#000;font-size:12pt;padding:0;overflow:visible}
+    .preview h1,.preview h2{color:#000;border-color:#999}
+    .preview blockquote{color:#333;border-color:#666;background:#f5f5f5}
+    .preview code{background:#f0f0f0;color:#333}
+    .preview pre{background:#f7f7f7;border:1px solid #ccc;color:#111}
+    .preview a{color:#00c}
+    .preview th{background:#eee}
+    .preview th,.preview td{border-color:#999;color:#111}
+    .preview li,.preview p{color:#111}
+  }
+  @page{margin:14mm}
 </style>
 </head>
 <body>
@@ -111,6 +142,15 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<div class="menu" id="exportMenu">
+  <h3>导出为</h3>
+  <button class="mi" data-fmt="md"><span class="d">Markdown 文件<span class="sub">.md 纯文本，编辑器通用</span></span>›</button>
+  <button class="mi" data-fmt="docx"><span class="d">Word 文档<span class="sub">.docx，WPS/Office 可直接打开</span></span>›</button>
+  <button class="mi" data-fmt="pdf"><span class="d">PDF<span class="sub">通过系统打印另存为 PDF</span></span>›</button>
+  <button class="mi" data-fmt="html"><span class="d">网页文件<span class="sub">.html，浏览器打开即渲染</span></span>›</button>
+  <button class="mi warn" id="cancelExport">取消</button>
+</div>
 
 <script>
 /* ---------- 迷你 Markdown 解析器（零依赖，够用即可） ---------- */
@@ -180,6 +220,102 @@ function mdToHtml(md){
   return html;
 }
 
+/* ---------- DOCX 生成器（零依赖：手写 ZIP + Word XML） ---------- */
+// CRC32 表
+const CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(buf){let c=0xFFFFFFFF;for(let i=0;i<buf.length;i++)c=CRC_TABLE[(c^buf[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function dosTime(){const d=new Date();return ((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF}
+function dosDate(){const d=new Date();return (((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF}
+function zipStore(files){ // files: [{name, data(TextEncoder array)}]
+  const enc=new TextEncoder();let local=[],central=[],offset=0;
+  files.forEach(f=>{
+    const name=enc.encode(f.name),data=f.data;
+    const lh=new Uint8Array(30+name.length+data.length);
+    const dv=new DataView(lh.buffer);
+    dv.setUint32(0,0x04034b50,true);       // signature
+    dv.setUint16(4,20,true);               // version needed
+    dv.setUint16(6,0,true);                // flags
+    dv.setUint16(8,0,true);                // method: store
+    dv.setUint16(10,dosTime(),true);       // mod time
+    dv.setUint16(12,dosDate(),true);       // mod date
+    dv.setUint32(14,crc32(data),true);     // crc32
+    dv.setUint32(18,data.length,true);     // compressed size
+    dv.setUint32(22,data.length,true);     // uncompressed size
+    dv.setUint16(26,name.length,true);     // name length
+    dv.setUint16(28,0,true);               // extra length
+    lh.set(name,30);lh.set(data,30+name.length);
+    local.push(lh);central.push({name,data,offset});offset+=lh.length;
+  });
+  const cdStart=offset;let cd=[];
+  central.forEach(f=>{
+    const name=f.name;const ch=new Uint8Array(46+name.length);
+    const dv=new DataView(ch.buffer);
+    dv.setUint32(0,0x02014b50,true);       // signature
+    dv.setUint16(4,20,true);               // version made by
+    dv.setUint16(6,20,true);               // version needed
+    dv.setUint16(8,0,true);                // flags
+    dv.setUint16(10,0,true);               // method: store
+    dv.setUint16(12,dosTime(),true);       // mod time
+    dv.setUint16(14,dosDate(),true);       // mod date
+    dv.setUint32(16,crc32(f.data),true);   // crc32
+    dv.setUint32(20,f.data.length,true);   // compressed size
+    dv.setUint32(24,f.data.length,true);   // uncompressed size
+    dv.setUint16(28,name.length,true);     // name length
+    dv.setUint16(30,0,true);               // extra length
+    dv.setUint16(32,0,true);               // comment length
+    dv.setUint16(34,0,true);               // disk start
+    dv.setUint16(36,0,true);               // internal attrs
+    dv.setUint32(38,0,true);               // external attrs
+    dv.setUint32(42,f.offset,true);        // local header offset
+    ch.set(name,46);cd.push(ch);
+  });
+  const cdLen=cd.reduce((s,c)=>s+c.length,0);
+  const eocd=new Uint8Array(22);const edv=new DataView(eocd.buffer);
+  edv.setUint32(0,0x06054b50,true);edv.setUint16(8,central.length,true);edv.setUint16(10,central.length,true);
+  edv.setUint32(12,cdLen,true);edv.setUint32(16,cdStart,true);
+  const total=local.reduce((s,c)=>s+c.length,0)+cdLen+eocd.length;
+  const out=new Uint8Array(total);let p=0;
+  local.forEach(c=>{out.set(c,p);p+=c.length});
+  cd.forEach(c=>{out.set(c,p);p+=c.length});
+  out.set(eocd,p);
+  return out;
+}
+function escXml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function mdToDocx(md){
+  const lines=md.replace(/\r\n?/g,'\n').split('\n');
+  let body='',inCode=false,codeBuf=[];
+  const para=(txt,bold,sz)=>`<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr>${bold?'<w:b/>':''}${sz?`<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`:''}</w:rPr><w:t xml:space="preserve">${escXml(txt)}</w:t></w:r></w:p>`;
+  for(let i=0;i<lines.length;i++){
+    const ln=lines[i];
+    if(/^```/.test(ln)){if(inCode){body+='<w:p><w:pPr><w:pStyle w:val="Code"/></w:pPr><w:r><w:t xml:space="preserve">'+escXml(codeBuf.join('\n'))+'</w:t></w:r></w:p>';codeBuf=[];inCode=false}else{inCode=true}continue}
+    if(inCode){codeBuf.push(ln);continue}
+    if(/^\s*$/.test(ln))continue;
+    let h=ln.match(/^(#{1,6})\s+(.*)$/);
+    if(h){const n=h[1].length;const sz=n===1?36:n===2?32:n===3?28:24;body+=para(h[2],true,sz);continue}
+    if(/^>\s?/.test(ln)){body+=para('▎'+ln.replace(/^>\s?/,''),false,22);continue}
+    if(/^\s*[-*+]\s+/.test(ln)){body+=para('• '+ln.replace(/^\s*[-*+]\s+/,''),false,24);continue}
+    if(/^\s*\d+\.\s+/.test(ln)){body+=para(ln.replace(/^\s*(\d+\.)\s+/,'$1 '),false,24);continue}
+    if(/^\s*\|/.test(ln)){ // 表格转文本
+      const cells=ln.split('|').map(s=>s.trim()).filter(s=>s&&!/^[-:]+$/.test(s));
+      if(cells.length)body+=para(cells.join(' | '),true,22);continue;
+    }
+    if(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(ln)){body+=para('─'.repeat(12),false,22);continue}
+    body+=para(ln.replace(/\*\*([^*]+)\*\*/g,'$1'),false,24);
+  }
+  const docXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>`;
+  const ctXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+  const relXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+  const enc=new TextEncoder();
+  return zipStore([
+    {name:'[Content_Types].xml',data:enc.encode(ctXml)},
+    {name:'_rels/.rels',data:enc.encode(relXml)},
+    {name:'word/document.xml',data:enc.encode(docXml)}
+  ]);
+}
+
 /* ---------- 应用逻辑 ---------- */
 const ed=document.getElementById('ed'), pv=document.getElementById('pv'),
       fname=document.getElementById('fname'), toast=document.getElementById('toast');
@@ -244,11 +380,36 @@ document.getElementById('btnSnap').onclick=saveSnap;
 document.getElementById('btnHist').onclick=()=>{renderSnaps();document.getElementById('drawer').classList.add('show');};
 document.getElementById('drawer').onclick=e=>{if(e.target.id==='drawer')e.currentTarget.classList.remove('show');};
 document.getElementById('btnClearSnap').onclick=()=>{if(confirm('清空全部快照?')){setSnaps([]);renderSnaps();}};
-document.getElementById('btnExport').onclick=()=>{
-  const blob=new Blob([ed.value],{type:'text/markdown'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=fname.value||'untitled.md';a.click();showToast('已导出 '+a.download);
-};
+const exportMenu=document.getElementById('exportMenu');
+function downloadBlob(data,mime,name){
+  const blob=data instanceof Blob?data:new Blob([data],{type:mime});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},800);
+  showToast('已导出 '+name);
+}
+document.getElementById('btnExport').onclick=()=>exportMenu.classList.add('show');
+document.getElementById('cancelExport').onclick=()=>exportMenu.classList.remove('show');
+exportMenu.querySelectorAll('.mi[data-fmt]').forEach(btn=>{
+  btn.onclick=()=>{
+    exportMenu.classList.remove('show');
+    const fmt=btn.dataset.fmt,name=fname.value.replace(/\.(md|docx|html)$/i,'')||'untitled';
+    if(fmt==='md'){downloadBlob(ed.value,'text/markdown',name+'.md')}
+    else if(fmt==='html'){
+      const full=`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(name)}</title><style>body{max-width:720px;margin:0 auto;padding:16px;font-family:-apple-system,'PingFang SC',sans-serif;line-height:1.7}pre{background:#f5f5f5;padding:10px;border-radius:8px;overflow:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:5px 9px}blockquote{border-left:3px solid #888;margin:0;padding:2px 12px;color:#444}img{max-width:100%}</style></head><body>${mdToHtml(ed.value)}</body></html>`;
+      downloadBlob(full,'text/html',name+'.html');
+    }
+    else if(fmt==='docx'){
+      try{const bytes=mdToDocx(ed.value);downloadBlob(bytes,'application/vnd.openxmlformats-officedocument.wordprocessingml.document',name+'.docx')}
+      catch(e){showToast('DOCX 生成失败: '+e.message)}
+    }
+    else if(fmt==='pdf'){
+      if(document.querySelector('[data-pane=edit]').classList.contains('show'))render();
+      document.querySelector('[data-pane=prev]').classList.add('show');
+      document.querySelector('[data-pane=edit]').classList.remove('show');
+      setTimeout(()=>{window.print()},120);
+    }
+  };
+});
 document.getElementById('btnCopy').onclick=async()=>{
   try{await navigator.clipboard.writeText(ed.value);showToast('已复制全文');}
   catch(e){ed.select();document.execCommand('copy');showToast('已复制');}
