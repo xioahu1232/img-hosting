@@ -585,12 +585,12 @@ function renderLive(content){
 }
 async function liveTick(){
   try{
-    const meta=JSON.parse(await fetchText(LIVE_META));
+    const meta=JSON.parse(await fetchText(LIVE_META+'?t='+Date.now()));
     if(!meta.live){liveSetState(false,'直播已结束');return}
     const ext=(meta.file||'live.md').split('.').pop()||'md';
     const fname='live.'+ext;
     if(fname!==liveFile){liveFile=fname;liveExt=ext;lvFileName.textContent=meta.file||fname}
-    const content=await fetchText('https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live/'+fname);
+    const content=await fetchText('https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live/'+fname+'?t='+Date.now());
     renderLive(content);
     const t=meta.updated?new Date(meta.updated):new Date();
     const ts=t.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -609,7 +609,7 @@ document.getElementById('btnLiveClose').onclick=stopLive;
 document.getElementById('btnLiveQuit').onclick=stopLive;
 /* 启动时探测一次直播状态 */
 setTimeout(async()=>{
-  try{const meta=JSON.parse(await fetchText(LIVE_META));if(meta.live){liveSetState(true);liveTick();liveTimer=setInterval(liveTick,5000)}}catch(e){}
+  try{const meta=JSON.parse(await fetchText(LIVE_META+'?t='+Date.now()));if(meta.live){liveSetState(true);liveTick();liveTimer=setInterval(liveTick,2500)}}catch(e){}
 },800);
 
 
