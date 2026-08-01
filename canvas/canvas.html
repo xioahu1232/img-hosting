@@ -202,6 +202,7 @@
   <button class="mi" data-fmt="docx"><span class="d">Word 文档<span class="sub">.docx，WPS/Office 可直接打开</span></span>›</button>
   <button class="mi" data-fmt="pdf"><span class="d">PDF<span class="sub">通过系统打印另存为 PDF</span></span>›</button>
   <button class="mi" data-fmt="html"><span class="d">网页文件<span class="sub">.html，浏览器打开即渲染</span></span>›</button>
+  <button class="mi" data-fmt="sync"><span class="d">同步到工作区<span class="sub">生成同步块，粘贴到 RikkaHub 聊天发给 AI 即可落盘</span></span>›</button>
   <button class="mi warn" id="cancelExport">取消</button>
 </div>
 
@@ -550,6 +551,11 @@ exportMenu.querySelectorAll('.mi[data-fmt]').forEach(btn=>btn.onclick=()=>{
   if(fmt==='md'){downloadBlob(ed.value,'text/markdown',name+'.md')}
   else if(fmt==='html'){const full=`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(name)}</title><style>body{max-width:720px;margin:0 auto;padding:16px;font-family:-apple-system,'PingFang SC',sans-serif;line-height:1.7}pre{background:#f5f5f5;padding:10px;border-radius:8px;overflow:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:5px 9px}blockquote{border-left:3px solid #888;margin:0;padding:2px 12px;color:#444}img{max-width:100%}</style></head><body>${mdToHtml(ed.value)}</body></html>`;downloadBlob(full,'text/html',name+'.html')}
   else if(fmt==='docx'){try{downloadBlob(mdToDocx(ed.value),'application/vnd.openxmlformats-officedocument.wordprocessingml.document',name+'.docx')}catch(e){showToast('DOCX 生成失败: '+e.message)}}
+  else if(fmt==='sync'){
+    const block='<!--CANVAS-SYNC-BEGIN-->\nname: '+fname.value+'\nupdated: '+new Date().toISOString()+'\n<!--CANVAS-SYNC-BODY-->\n'+ed.value+'\n<!--CANVAS-SYNC-END-->';
+    const doCopy=()=>{navigator.clipboard.writeText(block).then(()=>showToast('同步块已复制，去聊天粘贴')).catch(()=>{const ta=document.createElement('textarea');ta.value=block;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();showToast('同步块已复制，去聊天粘贴')})};
+    doCopy();
+  }
   else if(fmt==='pdf'){render();document.querySelector('[data-pane=prev]').classList.add('show');document.querySelector('[data-pane=edit]').classList.remove('show');setTimeout(()=>window.print(),120)}
 });
 document.getElementById('btnCopy').onclick=async()=>{try{await navigator.clipboard.writeText(ed.value);showToast('已复制全文')}catch(e){ed.select();document.execCommand('copy');showToast('已复制')}};
