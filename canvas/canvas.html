@@ -582,7 +582,7 @@ const LIVE_CHANNELS=[
   'https://cdn.jsdelivr.net/gh/xioahu1232/img-hosting@main/canvas/live',
   'https://raw.githubusercontent.com/xioahu1232/img-hosting/main/canvas/live'
 ];
-let liveTimer=null,liveFile='',liveExt='md';
+let liveTimer=null,liveFile='',liveExt='md',lastRendered='',typingTimer=null;
 async function fetchLiveFile(name){
   const t=Date.now();
   let lastErr=null;
@@ -600,15 +600,37 @@ function renderLive(content){
   if(liveExt==='md'){livePreview.innerHTML=mdToHtml(content)}
   else{livePreview.innerHTML='<pre class="coderaw">'+esc(content)+'</pre>'}
 }
+function handleLiveContent(content){
+  if(content===lastRendered)return;
+  if(content.length>lastRendered.length && content.slice(0,lastRendered.length)===lastRendered){
+    // 追加模式 → 打字机逐字显示新增部分（观感=AI正在打字）
+    const added=content.slice(lastRendered.length);
+    let i=0;
+    clearInterval(typingTimer);
+    typingTimer=setInterval(()=>{
+      i+=2; // 每次显示2个字符
+      renderLive(lastRendered+added.slice(0,i));
+      if(i>=added.length){
+        clearInterval(typingTimer);
+        lastRendered=content;
+      }
+    },18);
+  }else{
+    // 改写模式 → 整体重渲染
+    clearInterval(typingTimer);
+    renderLive(content);
+    lastRendered=content;
+  }
+}
 async function liveTick(){
   try{
     const meta=await fetchMeta();
     if(!meta.live){liveSetState(false,'直播已结束');return}
     const ext=(meta.file||'live.md').split('.').pop()||'md';
     const fname='live.'+ext;
-    if(fname!==liveFile){liveFile=fname;liveExt=ext;lvFileName.textContent=meta.file||fname}
+    if(fname!==liveFile){liveFile=fname;liveExt=ext;lvFileName.textContent=meta.file||fname;lastRendered=''}
     const content=await fetchLiveFile(fname);
-    renderLive(content);
+    handleLiveContent(content);
     const t=meta.updated?new Date(meta.updated):new Date();
     const ts=t.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     liveTime.textContent=ts;lvTime2.textContent='更新 '+ts;
@@ -621,7 +643,7 @@ function liveSetState(on,msg){
 }
 document.getElementById('btnLiveOpen').onclick=()=>liveView.classList.add('show');
 document.getElementById('btnLiveMin').onclick=()=>liveView.classList.remove('show');
-const stopLive=()=>{liveSetState(false,'');showToast('已退出直播')};
+const stopLive=()=>{liveSetState(false,'');clearInterval(typingTimer);showToast('已退出直播')};
 document.getElementById('btnLiveClose').onclick=stopLive;
 document.getElementById('btnLiveQuit').onclick=stopLive;
 /* 启动时探测一次直播状态 */
