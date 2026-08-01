@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Canvas Lite</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --fg:#e6e9ef; --muted:#8b93a7; --accent:#4f8cff; --accent2:#2ecc71;
+    --danger:#ff5c5c; --code:#0b0d11;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+  body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+  header{display:flex;align-items:center;gap:8px;padding:8px 10px;
+    background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header input.name{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:8px;padding:6px 10px;font-size:14px;min-width:120px;flex:1}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .btn:active{transform:scale(.96)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.good{background:var(--accent2);border-color:var(--accent2);color:#04210f}
+  .btn.warn{background:transparent;border-color:var(--danger);color:var(--danger)}
+  .tabs{display:flex;gap:6px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .tab{flex:1;text-align:center;padding:8px;border-radius:8px;background:var(--panel2);
+    border:1px solid var(--line);font-size:13px;color:var(--muted)}
+  .tab.active{color:#fff;border-color:var(--accent);background:#20304f}
+  main{flex:1;display:flex;min-height:0}
+  .pane{flex:1;min-width:0;display:none;flex-direction:column;overflow:hidden}
+  .pane.show{display:flex}
+  @media(min-width:820px){
+    .tabs{display:none}
+    .pane{display:flex !important;border-right:1px solid var(--line)}
+    .pane:last-child{border-right:none}
+  }
+  textarea{flex:1;width:100%;resize:none;border:none;outline:none;padding:14px;
+    background:var(--code);color:var(--fg);font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:14px;line-height:1.6;tab-size:2}
+  .preview{flex:1;overflow:auto;padding:16px 18px;line-height:1.7;font-size:15px}
+  .preview h1{font-size:1.6em;border-bottom:1px solid var(--line);padding-bottom:.3em;margin:.6em 0 .4em}
+  .preview h2{font-size:1.35em;border-bottom:1px solid var(--line);padding-bottom:.25em;margin:.9em 0 .4em}
+  .preview h3{font-size:1.15em;margin:.8em 0 .3em}
+  .preview h4{font-size:1em;margin:.7em 0 .3em;color:var(--muted)}
+  .preview p{margin:.5em 0}
+  .preview code{background:var(--panel2);padding:2px 6px;border-radius:5px;
+    font-family:ui-monospace,monospace;font-size:.9em}
+  .preview pre{background:var(--code);border:1px solid var(--line);border-radius:10px;
+    padding:12px;overflow:auto}
+  .preview pre code{background:none;padding:0}
+  .preview blockquote{border-left:3px solid var(--accent);margin:.6em 0;padding:.2em 12px;
+    color:var(--muted);background:var(--panel);border-radius:0 8px 8px 0}
+  .preview ul,.preview ol{padding-left:1.4em;margin:.5em 0}
+  .preview li{margin:.25em 0}
+  .preview a{color:var(--accent);text-decoration:none}
+  .preview hr{border:none;border-top:1px solid var(--line);margin:1.2em 0}
+  .preview table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:.92em}
+  .preview th,.preview td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+  .preview th{background:var(--panel2)}
+  .preview img{max-width:100%;border-radius:8px}
+  .drawer{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:50}
+  .drawer.show{display:block}
+  .drawer .sheet{position:absolute;left:0;right:0;bottom:0;max-height:70%;overflow:auto;
+    background:var(--panel);border-radius:16px 16px 0 0;padding:14px}
+  .drawer h3{margin:.2em 0 .6em;font-size:15px}
+  .snap{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);
+    border-radius:10px;margin-bottom:8px;background:var(--panel2)}
+  .snap .meta{flex:1;min-width:0}
+  .snap .t{font-size:13px}
+  .snap .d{font-size:11px;color:var(--muted)}
+  .statusbar{display:flex;gap:14px;padding:5px 12px;background:var(--panel);
+    border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+  .toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);
+    background:#000;border:1px solid var(--line);color:#fff;padding:8px 16px;border-radius:20px;
+    font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:99}
+  .toast.show{opacity:.95}
+</style>
+</head>
+<body>
+<header>
+  <input class="name" id="fname" value="untitled.md" spellcheck="false">
+  <button class="btn good" id="btnSnap">存快照</button>
+  <button class="btn" id="btnHist">历史</button>
+  <button class="btn" id="btnExport">导出</button>
+  <button class="btn" id="btnCopy">复制</button>
+</header>
+<div class="tabs">
+  <div class="tab active" data-p="edit">编辑</div>
+  <div class="tab" data-p="prev">预览</div>
+</div>
+<main>
+  <div class="pane show" data-pane="edit">
+    <textarea id="ed" placeholder="在这里写 Markdown..." spellcheck="false"></textarea>
+  </div>
+  <div class="pane" data-pane="prev">
+    <div class="preview" id="pv"></div>
+  </div>
+</main>
+<div class="statusbar">
+  <span id="stat-words">0 字</span>
+  <span id="stat-lines">0 行</span>
+  <span id="stat-saved">未保存</span>
+</div>
+
+<div class="drawer" id="drawer">
+  <div class="sheet">
+    <h3>版本快照 <button class="btn warn" id="btnClearSnap" style="float:right">清空</button></h3>
+    <div id="snapList"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 迷你 Markdown 解析器（零依赖，够用即可） ---------- */
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function inline(s){
+  // 转义已由块级处理时完成；这里只处理行内
+  s=s.replace(/`([^`]+)`/g,(m,c)=>'<code>'+c+'</code>');
+  s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/(^|[^*])\*([^*]+)\*/g,'$1<em>$2</em>');
+  s=s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img alt="$1" src="$2">');
+  s=s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function mdToHtml(md){
+  const lines=md.replace(/\r\n?/g,'\n').split('\n');
+  let html='',i=0;
+  const flushInline=t=>inline(esc(t));
+  while(i<lines.length){
+    let ln=lines[i];
+    // 代码块
+    if(/^```/.test(ln)){
+      const lang=ln.slice(3).trim(); let buf=[]; i++;
+      while(i<lines.length && !/^```/.test(lines[i])){buf.push(lines[i]);i++}
+      i++; html+='<pre><code>'+esc(buf.join('\n'))+'</code></pre>'; continue;
+    }
+    // 水平线
+    if(/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(ln)){html+='<hr>';i++;continue;}
+    // 标题
+    let h=ln.match(/^(#{1,6})\s+(.*)$/);
+    if(h){const n=h[1].length;html+='<h'+n+'>'+flushInline(h[2])+'</h'+n+'>';i++;continue;}
+    // 引用
+    if(/^>\s?/.test(ln)){
+      let buf=[];
+      while(i<lines.length && /^>\s?/.test(lines[i])){buf.push(lines[i].replace(/^>\s?/,''));i++}
+      html+='<blockquote>'+mdToHtml(buf.join('\n'))+'</blockquote>';continue;
+    }
+    // 表格
+    if(/\|/.test(ln) && i+1<lines.length && /^\s*\|?[\s:-]+\|[\s:|-]*$/.test(lines[i+1])){
+      const head=ln.split('|').map(s=>s.trim()).filter((s,idx,a)=>!(idx===0&&s==='')&&!(idx===a.length-1&&s===''));
+      i+=2; let rows=[];
+      while(i<lines.length && /\|/.test(lines[i]) && lines[i].trim()!==''){
+        rows.push(lines[i].split('|').map(s=>s.trim()).filter((s,idx,a)=>!(idx===0&&s==='')&&!(idx===a.length-1&&s==='')));i++;
+      }
+      let t='<table><thead><tr>'+head.map(c=>'<th>'+flushInline(c)+'</th>').join('')+'</tr></thead><tbody>';
+      rows.forEach(r=>{t+='<tr>'+r.map(c=>'<td>'+flushInline(c)+'</td>').join('')+'</tr>'});
+      html+=t+'</tbody></table>';continue;
+    }
+    // 无序列表
+    if(/^\s*[-*+]\s+/.test(ln)){
+      let buf=[];
+      while(i<lines.length && /^\s*[-*+]\s+/.test(lines[i])){buf.push(lines[i].replace(/^\s*[-*+]\s+/,''));i++}
+      html+='<ul>'+buf.map(x=>'<li>'+flushInline(x)+'</li>').join('')+'</ul>';continue;
+    }
+    // 有序列表
+    if(/^\s*\d+\.\s+/.test(ln)){
+      let buf=[];
+      while(i<lines.length && /^\s*\d+\.\s+/.test(lines[i])){buf.push(lines[i].replace(/^\s*\d+\.\s+/,''));i++}
+      html+='<ol>'+buf.map(x=>'<li>'+flushInline(x)+'</li>').join('')+'</ol>';continue;
+    }
+    // 空行
+    if(/^\s*$/.test(ln)){i++;continue;}
+    // 普通段落（合并连续非空行）
+    let buf=[ln];i++;
+    while(i<lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6}\s|>|```|\s*[-*+]\s|\s*\d+\.\s)/.test(lines[i])){buf.push(lines[i]);i++}
+    html+='<p>'+flushInline(buf.join(' '))+'</p>';
+  }
+  return html;
+}
+
+/* ---------- 应用逻辑 ---------- */
+const ed=document.getElementById('ed'), pv=document.getElementById('pv'),
+      fname=document.getElementById('fname'), toast=document.getElementById('toast');
+const LSKEY='canvasLite:draft', LSNAME='canvasLite:name', LSSNAP='canvasLite:snaps';
+
+function render(){pv.innerHTML=mdToHtml(ed.value);updateStat();}
+function updateStat(){
+  const t=ed.value;
+  document.getElementById('stat-words').textContent=t.replace(/\s/g,'').length+' 字';
+  document.getElementById('stat-lines').textContent=t.split('\n').length+' 行';
+}
+function showToast(msg){toast.textContent=msg;toast.classList.add('show');
+  clearTimeout(showToast._t);showToast._t=setTimeout(()=>toast.classList.remove('show'),1600);}
+function autosave(){
+  localStorage.setItem(LSKEY,ed.value);
+  localStorage.setItem(LSNAME,fname.value);
+  document.getElementById('stat-saved').textContent='已自动保存 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+}
+
+/* 快照 */
+function getSnaps(){try{return JSON.parse(localStorage.getItem(LSSNAP)||'[]')}catch(e){return[]}}
+function setSnaps(a){localStorage.setItem(LSSNAP,JSON.stringify(a))}
+function saveSnap(){
+  const a=getSnaps();
+  a.unshift({t:Date.now(),name:fname.value,content:ed.value});
+  if(a.length>50)a.length=50;
+  setSnaps(a);showToast('已存快照 ('+a.length+')');
+}
+function renderSnaps(){
+  const a=getSnaps(),box=document.getElementById('snapList');
+  if(!a.length){box.innerHTML='<p style="color:var(--muted);font-size:13px">还没有快照</p>';return;}
+  box.innerHTML='';
+  a.forEach((s,idx)=>{
+    const d=new Date(s.t);
+    const div=document.createElement('div');div.className='snap';
+    const preview=(s.content||'').replace(/\n/g,' ').slice(0,40);
+    div.innerHTML='<div class="meta"><div class="t">'+(s.name||'untitled')+'</div>'+
+      '<div class="d">'+d.toLocaleString('zh-CN')+' · '+preview+'…</div></div>';
+    const rb=document.createElement('button');rb.className='btn primary';rb.textContent='恢复';
+    rb.onclick=()=>{ed.value=s.content;fname.value=s.name||fname.value;render();autosave();
+      document.getElementById('drawer').classList.remove('show');showToast('已恢复该快照');};
+    const db=document.createElement('button');db.className='btn warn';db.textContent='删';
+    db.onclick=()=>{const arr=getSnaps();arr.splice(idx,1);setSnaps(arr);renderSnaps();};
+    div.appendChild(rb);div.appendChild(db);box.appendChild(div);
+  });
+}
+
+/* 事件 */
+ed.addEventListener('input',()=>{render();autosave();});
+fname.addEventListener('input',autosave);
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    const p=tab.dataset.p;
+    document.querySelector('[data-pane=edit]').classList.toggle('show',p==='edit');
+    document.querySelector('[data-pane=prev]').classList.toggle('show',p==='prev');
+    if(p==='prev')render();
+  };
+});
+document.getElementById('btnSnap').onclick=saveSnap;
+document.getElementById('btnHist').onclick=()=>{renderSnaps();document.getElementById('drawer').classList.add('show');};
+document.getElementById('drawer').onclick=e=>{if(e.target.id==='drawer')e.currentTarget.classList.remove('show');};
+document.getElementById('btnClearSnap').onclick=()=>{if(confirm('清空全部快照?')){setSnaps([]);renderSnaps();}};
+document.getElementById('btnExport').onclick=()=>{
+  const blob=new Blob([ed.value],{type:'text/markdown'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=fname.value||'untitled.md';a.click();showToast('已导出 '+a.download);
+};
+document.getElementById('btnCopy').onclick=async()=>{
+  try{await navigator.clipboard.writeText(ed.value);showToast('已复制全文');}
+  catch(e){ed.select();document.execCommand('copy');showToast('已复制');}
+};
+window.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveSnap();}
+});
+
+/* 启动：恢复草稿 */
+(function init(){
+  const draft=localStorage.getItem(LSKEY), nm=localStorage.getItem(LSNAME);
+  if(nm)fname.value=nm;
+  ed.value=draft!==null?draft:'# 我的第一篇 Canvas\n\n开始写点什么吧。\n\n- 左边编辑，右边预览\n- 顶部「存快照」保存版本\n- 「历史」里可以随时恢复\n\n> 全部数据只存在你的浏览器本地。\n';
+  render();
+})();
+</script>
+</body>
+</html>
