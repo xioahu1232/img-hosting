@@ -1,0 +1,169 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1.7cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\pagestyle{empty}
+
+\newtheorem{problem}{Problem}
+\newtheorem{lemma}{Lemma}
+\theoremstyle{definition}
+\newtheorem{answer}{Answer}
+
+\title{\vspace{-1.4em}\textbf{A Digit-Concatenation Puzzle}\\[0.2em]
+\large Complete Solution}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-4.2em}
+
+\begin{problem}
+Let $A$ be a two-digit number and $B$ a three-digit number such that the product
+$C=A\cdot B$ is a five-digit number and the ten digits of $A,B,C$ taken together are
+exactly $0,1,\dots,9$ (each used once). Suppose furthermore that
+\[
+A<R(A),\qquad B>R(B),\qquad B+R(B)=11\bigl(A+R(A)\bigr),
+\]
+where $R(x)$ denotes the integer obtained by reversing the digits of $x$.
+Determine the ten-digit number $N$ formed by concatenating $A$, $B$, and $C$.
+\end{problem}
+
+\section*{Notation and First Reductions}
+Write
+\[
+A=10a+b,\qquad B=100c+10d+e,
+\]
+where $a,b,c,d,e$ are pairwise distinct digits and $a,c\neq 0$. Reversing gives
+\[
+R(A)=10b+a,\qquad R(B)=100e+10d+c.
+\]
+The inequalities reduce to
+\[
+A<R(A)\iff 10a+b<10b+a\iff a<b,
+\qquad
+B>R(B)\iff 100c+10d+e>100e+10d+c\iff c>e.
+\]
+Put $s=a+b$. Then
+\[
+A+R(A)=11(a+b)=11s,
+\]
+and the given reversal relation $B+R(B)=11(A+R(A))$ becomes
+\[
+B+R(B)=101(c+e)+20d=121s. \tag{1}
+\]
+
+\subsection*{Two congruences from (1)}
+Reducing (1) modulo $10$ gives
+\[
+c+e\equiv s\pmod{10}. \tag{2}
+\]
+Reducing (1) modulo $11$, using $101\equiv 2$, $20\equiv 9$, $121\equiv 0\pmod{11}$,
+\[
+2(c+e)+9d\equiv 0\pmod{11}
+\iff c+e\equiv d\pmod{11}. \tag{3}
+\]
+
+\begin{lemma}\label{lem:core}
+$a+b=d=c+e$.
+\end{lemma}
+\begin{proof}
+Since $0\le c+e\le 17$ and $0\le d\le 9$, congruence (3) leaves only
+\[
+c+e=d \quad\text{or}\quad c+e=d+11.
+\]
+If $c+e=d+11$, substituting into (1) gives
+\[
+101(d+11)+20d=121s
+\iff 121d+1111=121s
+\iff 1111=121(s-d),
+\]
+impossible, because $1111\equiv 22\pmod{121}$ is not divisible by $121$.
+Hence $c+e=d$, and (1) becomes $121d=121s$, so $s=d$.
+\end{proof}
+
+Consequently all six digits $a,b,c,d,e$ and~$0$ are forced to be distinct
+where they occur: indeed $e\neq 0$ (otherwise $c+e=d$ forces $c=d$, contradicting
+distinctness), $b\neq 0$ since $a<b$, and $a,c\neq 0$ by hypothesis. Therefore the
+digit $0$ must appear in $C$.
+
+\section*{Modulo 9: Narrowing the Middle Digit}
+The digit sums are
+\[
+A:\ a+b=d,\qquad B:\ c+d+e=(c+e)+d=2d,\qquad C:\ 45-3d,
+\]
+because all ten digits occur exactly once. Since $C=A\cdot B$ and every number is
+congruent to the sum of its digits modulo $9$,
+\[
+45-3d\equiv d\cdot 2d=2d^{2}\pmod 9
+\iff d(2d+3)\equiv 0\pmod 9.
+\]
+As $d=c+e$ with $c>e\ge 1$ and $d\le 9$, we have $3\le d\le 9$. Checking
+$d=3,\dots,9$:
+\[
+d=3:\ 3\cdot 9=27\equiv 0,\qquad
+d=6:\ 6\cdot 15=90\equiv 0,\qquad
+d=9:\ 9\cdot 21=189\equiv 0,
+\]
+while $d=4,5,7,8$ give residues $8,2,2,8$. Hence
+\[
+d\in\{3,6,9\}.
+\]
+
+\section*{Case Analysis}
+\subsection*{Case $d=3$.}
+$c+e=3$ with $c>e\ge 1$ forces $(c,e)=(2,1)$, so $B=231$. Then $a+b=3$ with
+$a<b$ forces $A=12$, but the digits $1,2$ already occur in $B$. No solution.
+
+\subsection*{Case $d=6$.}
+$c+e=6$ with $c>e\ge 1$: $(c,e)=(5,1)$ or $(4,2)$.
+\begin{itemize}
+\item $B=561$: $a+b=6$ with $a<b$ and digits distinct from $\{5,6,1\}$ leaves only
+$A=24$ (the pairs $(0,6)$ and $(3,3)$ are excluded by $a\neq 0$ and distinctness).
+But $24\cdot 561=13464$ has repeated digits. Rejected.
+\item $B=462$: $a+b=6$ leaves $A=15$, but $15\cdot 462=6930$ is not a five-digit
+number. Rejected.
+\end{itemize}
+
+\subsection*{Case $d=9$.}
+$c+e=9$ with $c>e\ge 1$: $(c,e)\in\{(8,1),(7,2),(6,3),(5,4)\}$, so
+\[
+B\in\{891,792,693,594\},
+\]
+and $a+b=9$ with $a<b$ gives
+\[
+A\in\{18,27,36,45\}.
+\]
+Discard candidates by two tests: (i) any digit of $A$ already occurring in $B$;
+(ii) the units digit of $C$, which is $be \bmod 10$, colliding with a used digit.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{1.0cm}|p{2.5cm}|p{10.8cm}}
+$B$ & $A$ after test (i) & outcome \\ \hline
+$891$ & $27,36,45$ & units digit of $C$ equals $b\in\{7,6,5\}$, already used --- all fail \\ \hline
+$792$ & $18,36,45$ & $18\cdot 792=14256$ repeats $1,2$; $36$: units $6\cdot 2\equiv 2$ used; $45\cdot 792=35640$ repeats $4,5$ --- all fail \\ \hline
+$693$ & $18,27,45$ & $18\cdot 693=12474$ has repeated digits; $27\cdot 693=18711$ repeats; $45$: units $5\cdot 3\equiv 5$ used --- all fail \\ \hline
+$594$ & $18,27,36$ & $18\cdot 594=10692$ repeats $1,9$; $36$: units $6\cdot 4\equiv 4$ used; $\mathbf{27\cdot 594=16038}$ works
+\end{tabular}
+\end{center}
+
+\section*{Verification and Answer}
+\[
+27\cdot 594=16038,\qquad 27<72,\qquad 594>495,
+\]
+\[
+594+495=1089=11\cdot 99=11(27+72).
+\]
+All conditions hold, and
+\[
+N=27\,|\,594\,|\,16038=2759416038
+\]
+uses every digit $0$--$9$ exactly once.
+
+\begin{answer}
+\[
+\boxed{\;A=27,\quad B=594,\quad C=16038,\quad N=2759416038.\;}
+\]
+\end{answer}
+
+\end{document}
